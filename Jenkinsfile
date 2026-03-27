@@ -4,6 +4,7 @@ pipeline {
     environment {
         AWS_REGION = 'us-east-1' 
     }
+
     stages {
         stage('Set AWS Credentials') {
             steps {
@@ -18,13 +19,14 @@ pipeline {
                 }
             }
         }
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/Lew228/jenkins-s3-test' 
             }
         }
 
-        // stage('Testing') {
+    // stage('Testing') {
         //     // withEnv(["JFROG_BINARY_PATH=${tool 'jfrog-cli'}"]) {
         //     // // The 'jf' tool is available in this scope.
         //     // }
@@ -52,7 +54,8 @@ pipeline {
         //         }
         //     } 
         // }
-    
+
+        
         stage('Initialize Terraform') {
             steps {
                 withCredentials([[
@@ -68,13 +71,9 @@ pipeline {
             }
         }
 
-   stage('Validate Terraform') {
+        stage('Validate Terraform') {
             steps {
-                    sh '''
-                    
-                    terraform validate
-                    '''
-                }
+                sh 'terraform validate'
             }
         }
 
@@ -92,6 +91,7 @@ pipeline {
                 }
             }
         }
+
         stage('Apply Terraform') {
             steps {
                 input message: "Approve Terraform Apply?", ok: "Deploy"
@@ -107,30 +107,34 @@ pipeline {
                 }
             }
         }
-    }
 
-    stage('Optional Destroy') {
+        stage('Optional Destroy') {
             steps {
                 script {
                     def destroyChoice = input(
                         message: 'Do you want to run terraform destroy?',
-                        ok: 'Submit',
                         parameters: [
                             choice(
                                 name: 'DESTROY',
-                                choices: ['no', 'yes'],
+                                choices: ['no', 'yes'].join('\n'),
                                 description: 'Select yes to destroy resources'
                             )
                         ]
                     )
                     if (destroyChoice == 'yes') {
-                        sh 'terraform destroy -auto-approve'
+                        withCredentials([[
+                            $class: 'AmazonWebServicesCredentialsBinding',
+                            credentialsId: 'JenkinsCLI'
+                        ]]) {
+                            sh 'terraform destroy -auto-approve'
+                        }
                     } else {
                         echo "Skipping destroy"
                     }
                 }
             }
         }
+    } // End of stages
 
     post {
         success {
@@ -140,3 +144,4 @@ pipeline {
             echo 'Terraform deployment failed!'
         }
     }
+}
